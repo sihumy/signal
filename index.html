@@ -1,0 +1,244 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>신호등 점등 계산기</title>
+<style>
+    body {
+        font-family: Arial, sans-serif;
+        background-color: #f4f4f9;
+        margin: 0;
+        padding: 10px;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: flex-start;
+        min-height: 100vh;
+    }
+    h1 {
+        font-size: 1.5em;
+        margin-bottom: 15px;
+    }
+    .time-display {
+        background: #fff;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        border-radius: 10px;
+        padding: 15px;
+        width: 90%;
+        max-width: 350px;
+        text-align: center;
+    }
+    p {
+        margin: 10px 0;
+    }
+    .small-font {
+        font-size: 0.9em;
+    }
+    .red-text {
+        color: red;
+    }
+    .green-text {
+        color: green;
+    }
+    #current-time, #remaining-time {
+        font-size: 1.3em;
+        font-weight: bold;
+    }
+    #interval-info {
+        font-size: 0.8em;
+        color: #666;
+    }
+    .additional-lights {
+        margin-top: 15px;
+        font-size: 0.9em;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        width: 100%; /* 추가된 테이블의 크기를 100%로 설정 */
+    }
+    .next-lights {
+        display: flex;
+        flex-wrap: wrap;
+        justify-content: center;
+    }
+    .next-lights span {
+        margin: 2px 4px;
+    }
+    .status-dot {
+        display: inline-block;
+        width: 10px;
+        height: 10px;
+        border-radius: 50%;
+        margin-right: 5px;
+    }
+    .blinking {
+        animation: blinking 1s infinite;
+    }
+    @keyframes blinking {
+        0% { background-color: green; }
+        50% { background-color: white; }
+        100% { background-color: green; }
+    }
+    .light-table {
+        width: 80%; /* 테이블 크기를 80%로 설정 */
+        border-collapse: collapse;
+        table-layout: fixed;
+        margin: 0 auto; /* 테이블을 가운데 정렬 */
+    }
+    .light-table th, .light-table td {
+        border: none;
+        padding: 4px;
+        text-align: left;
+    }
+    .light-table th {
+        width: 50%;
+    }
+    .light-table td {
+        width: 25%;
+    }
+    .light-table tr:nth-child(even) {
+        background-color: #f2f2f2;
+    }
+</style>
+<script>
+function getNextLightTimes(currentTime, count) {
+    const times = [];
+    let nextTime = new Date(currentTime.getTime());
+    nextTime.setHours(0, 1, 0, 0); // 0시 1분부터 시작
+    while (times.length < count) {
+        let interval = 150;
+        const hours = nextTime.getHours();
+        const minutes = nextTime.getMinutes();
+        if (hours > 6 || (hours === 6 && minutes >= 1)) {
+            interval = 160;
+        }
+        nextTime.setSeconds(nextTime.getSeconds() + interval);
+        if (nextTime > currentTime) {
+            times.push({time: new Date(nextTime.getTime()), interval: interval});
+        }
+    }
+    return times;
+}
+
+function updateClock() {
+    const now = new Date();
+    const nextTimes = getNextLightTimes(now, 25);
+    let nextTime = new Date(nextTimes[0].time.getTime() - 3000); // 3초만 빼기
+    const interval = nextTimes[0].interval;
+    let diff = nextTime - now;
+    
+    // 만약 diff가 -1000 미만이라면 다음 신호로 넘어감
+    if (diff < -1000) {
+        nextTime = new Date(nextTimes[1].time.getTime() - 3000);
+        diff = nextTime - now;
+    }
+    
+    const totalSeconds = Math.max(0, Math.floor(diff / 1000));
+    const minutes = Math.floor(totalSeconds / 60);
+    const seconds = totalSeconds % 60;
+    
+    document.getElementById('current-time').textContent = `${now.toLocaleTimeString()}`;
+    document.getElementById('remaining-time').textContent = `[-${minutes}:${seconds.toString().padStart(2, '0')}]`;
+    document.getElementById('interval-info').textContent = `(${interval}초)`;
+    
+    const formattedTimes = nextTimes.map(item => {
+        const adjustedTime = new Date(item.time.getTime() - 4000); // 여전히 4초 빼기
+        return `${adjustedTime.getMinutes().toString().padStart(2, '0')}:${adjustedTime.getSeconds().toString().padStart(2, '0')}`;
+    });
+    for (let i = 0; i < 5; i++) {
+        document.getElementById(`next-lights-${i+1}`).textContent = formattedTimes.slice(i*5, (i+1)*5).join(' ');
+    }
+
+    const lights = [
+        {id: 'church-kt', name: '교회 앞', offset: 0},
+        {id: 'sewon3', name: '세원 3차정문', offset: -20},
+        {id: 'kt-ad', name: 'KT-AD', offset: 35},
+        {id: 'ad-park', name: 'AD-공원', offset: -70},
+        {id: 'ad-kt', name: 'AD-KT', offset: -32},
+        {id: 'kt-apt', name: 'KT-APT', offset: 13},
+        {id: 'apt-park', name: 'APT-공원', offset: 47},
+    ];
+
+    lights.forEach(light => {
+        light.remainingSeconds = (totalSeconds + light.offset + interval) % interval;
+    });
+
+    lights.sort((a, b) => a.remainingSeconds - b.remainingSeconds);
+
+    const tableBody = document.getElementById('light-table-body');
+    tableBody.innerHTML = '';
+    lights.forEach(light => {
+        const row = document.createElement('tr');
+        const nameCell = document.createElement('th');
+        const timeCell = document.createElement('td');
+        const greenTimeCell = document.createElement('td');
+        
+        nameCell.innerHTML = `<span id="${light.id}-status" class="status-dot"></span> ${light.name}`;
+        timeCell.innerHTML = `<span id="${light.id}-time"></span>`;
+        greenTimeCell.innerHTML = `<span id="${light.id}-green-time" class="green-text"></span>`;
+
+        row.appendChild(nameCell);
+        row.appendChild(timeCell);
+        row.appendChild(greenTimeCell);
+        tableBody.appendChild(row);
+
+        updateAdditionalLight(light.id, light.remainingSeconds, interval);
+    });
+}
+
+function updateAdditionalLight(id, seconds, interval) {
+    const statusDot = document.getElementById(`${id}-status`);
+    const timeSpan = document.getElementById(`${id}-time`);
+    const greenTimeSpan = document.getElementById(`${id}-green-time`);
+    const remainingSeconds = interval - seconds;
+
+    if (remainingSeconds <= 15) {
+        statusDot.style.backgroundColor = 'green';
+        statusDot.classList.remove('blinking');
+        greenTimeSpan.textContent = `+${formatTime(interval - seconds)}`;
+    } else if (remainingSeconds <= 25) {
+        statusDot.style.backgroundColor = 'green';
+        statusDot.classList.add('blinking');
+        greenTimeSpan.textContent = `+${formatTime(interval - seconds)}`;
+    } else {
+        statusDot.style.backgroundColor = 'red';
+        statusDot.classList.remove('blinking');
+        greenTimeSpan.textContent = '';
+    }
+
+    timeSpan.textContent = `-${formatTime(seconds)}`;
+}
+
+function formatTime(seconds) {
+    const minutes = Math.floor(seconds / 60);
+    const remainingSeconds = seconds % 60;
+    return `${minutes}:${remainingSeconds.toString().padStart(2, '0')}`;
+}
+
+document.addEventListener('DOMContentLoaded', function() {
+    updateClock();
+    setInterval(updateClock, 1000);
+});
+</script>
+</head>
+<body>
+<h1>🚦신호등 점등 계산기🚦</h1>
+<div class="time-display">
+    <p><span id="current-time"></span> <span id="remaining-time" class="red-text"></span></p>
+    <p class="small-font">다음 점등 시간 <span id="interval-info"></span></p>
+    <div class="next-lights">
+        <span id="next-lights-1"></span>
+        <span id="next-lights-2"></span>
+        <span id="next-lights-3"></span>
+        <span id="next-lights-4"></span>
+        <span id="next-lights-5"></span>
+    </div>
+    <div class="additional-lights">
+        <table class="light-table">
+            <tbody id="light-table-body"></tbody>
+        </table>
+    </div>
+</div>
+</body>
+</html>
